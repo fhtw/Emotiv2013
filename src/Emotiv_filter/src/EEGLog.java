@@ -1,9 +1,11 @@
 import com.sun.jna.Pointer;
 import com.sun.jna.ptr.IntByReference;
 
+import java.io.*;
+import java.nio.charset.Charset;
+
 public class EEGLog {
-    public static void main(String[] args) 
-    {
+    public static void main(String[] args) throws IOException {
         System.loadLibrary("edk");
     	Pointer eEvent				= Edk.INSTANCE.EE_EmoEngineEventCreate();
     	Pointer eState				= Edk.INSTANCE.EE_EmoStateCreate();
@@ -14,11 +16,29 @@ public class EEGLog {
     	int state  					= 0;
     	float secs 					= 1;
     	boolean readytocollect 		= false;
-    	
-    	userID 			= new IntByReference(0);
+        boolean firstLog            = true;
+    	File logFile                = null;
+        FileWriter f                = null;
+        userID 			= new IntByReference(0);
 		nSamplesTaken	= new IntByReference(0);
-    	
-    	switch (option) {
+
+        if(args.length < 2){
+            System.out.println("Please supply the log file name.\\nUsage: EEGLog [log_file_name].");
+            return;
+        }
+
+        try {
+            logFile = new File(args[1]);
+            if(logFile.isFile()){
+                System.out.println("File already exists!");
+                return;
+            }
+            f = new FileWriter(logFile);
+        } catch (IOException e) {
+            System.out.println("File not found!");
+            return;
+        }
+        switch (option) {
 		case 1:
 		{
 			if (Edk.INSTANCE.EE_EngineConnect("Emotiv Systems-5") != EdkErrorCode.EDK_OK.ToInt()) {
@@ -73,7 +93,7 @@ public class EEGLog {
 				break;
 			}
 			
-			if (readytocollect) 
+			if (readytocollect && !firstLog)
 			{
 				Edk.INSTANCE.EE_DataUpdateHandle(0, hData);
 
@@ -88,20 +108,23 @@ public class EEGLog {
 						
 						double[] data = new double[nSamplesTaken.getValue()];
 						for (int sampleIdx=0 ; sampleIdx<nSamplesTaken.getValue() ; ++ sampleIdx) {
-							for (int i = 0 ; i < 14 ; i++) {
+							for (int i = 0 ; i < 22 ; i++) {
 
 								Edk.INSTANCE.EE_DataGet(hData, i, data, nSamplesTaken.getValue());
-								System.out.print(data[sampleIdx]);
-								System.out.print(",");
-							}	
-							System.out.println();
+                                //Subtract 4200 to show positive/negative values
+                                f.write(String.valueOf(data[sampleIdx] - 4200) + ",");
+                            }
+							f.write("\n");
 						}
 					}
 				}
 			}
+            firstLog = false;
 		}
-    	
-    	Edk.INSTANCE.EE_EngineDisconnect();
+
+        f.close();
+
+        Edk.INSTANCE.EE_EngineDisconnect();
     	Edk.INSTANCE.EE_EmoStateFree(eState);
     	Edk.INSTANCE.EE_EmoEngineEventFree(eEvent);
     	System.out.println("Disconnected!");
