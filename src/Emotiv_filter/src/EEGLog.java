@@ -1,13 +1,16 @@
 import com.sun.jna.Pointer;
 import com.sun.jna.ptr.IntByReference;
+import org.omg.CORBA.MARSHAL;
 
 import java.io.*;
-import java.nio.charset.Charset;
+
 
 public class EEGLog {
+
+    public static final int MAX_COUNT = 128;
+
     public static void main(String[] args) throws IOException {
-        System.loadLibrary("edk");
-    	Pointer eEvent				= Edk.INSTANCE.EE_EmoEngineEventCreate();
+        Pointer eEvent				= Edk.INSTANCE.EE_EmoEngineEventCreate();
     	Pointer eState				= Edk.INSTANCE.EE_EmoStateCreate();
     	IntByReference userID 		= null;
 		IntByReference nSamplesTaken= null;
@@ -21,6 +24,14 @@ public class EEGLog {
         FileWriter f                = null;
         userID 			= new IntByReference(0);
 		nSamplesTaken	= new IntByReference(0);
+        double[][] dataArray = new double[14][MAX_COUNT];
+        double[] imagArray = new double[128];
+        int valCount = 0;
+        int i;
+
+        for(i = 0; i < MAX_COUNT; i++){
+            imagArray[i] = 0.0;
+        }
 
         if(args.length < 2){
             System.out.println("Please supply the log file name.\\nUsage: EEGLog [log_file_name].");
@@ -108,16 +119,28 @@ public class EEGLog {
 						
 						double[] data = new double[nSamplesTaken.getValue()];
 						for (int sampleIdx=0 ; sampleIdx<nSamplesTaken.getValue() ; ++ sampleIdx) {
-							for (int i = 0 ; i < 22 ; i++) {
+							for (i = 0 ; i < 14 ; i++) {
 
 								Edk.INSTANCE.EE_DataGet(hData, i, data, nSamplesTaken.getValue());
                                 //Subtract 4200 to show positive/negative values
-                                f.write(String.valueOf(data[sampleIdx] - 4200) + ",");
+                                dataArray[sampleIdx][valCount] = data[sampleIdx] - 4200;
                             }
-							f.write("\n");
 						}
 					}
 				}
+                if(++valCount == MAX_COUNT){
+                    for(i = 0; i < 14; i++){
+                        FastFourierTransform.fastFT(dataArray[i], imagArray, true);
+                    }
+                    for(i = 0; i < MAX_COUNT; i++){
+                        for(int j = 0; j < 14; i++){
+                            f.write(String.valueOf(dataArray[j][i]) + ",");
+                            dataArray[j][i] = 0.0;
+                        }
+                        f.write("\n");
+                    }
+                    valCount = 0;
+                }
 			}
             firstLog = false;
 		}
